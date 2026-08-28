@@ -5,7 +5,6 @@ from typing import Any, ClassVar
 import allure
 import requests
 
-
 # Логгер для записи технических ошибок
 logger = logging.getLogger(__name__)
 
@@ -135,11 +134,11 @@ class Helper:
 
     # Добавляет в Allure ошибку соединения/timeout
     def attach_transport_error_safe(
-        self,
-        method: str,
-        url: str,
-        timeout: Any,
-        error: requests.RequestException,
+            self,
+            method: str,
+            url: str,
+            timeout: Any,
+            error: requests.RequestException,
     ) -> None:
         try:
             allure.attach(
