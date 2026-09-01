@@ -92,7 +92,7 @@ class ApiTodo(ApiBase):
             expected_status_code: int = 204,
             allow_not_found: bool = False) -> TodoDeleteResponseModel | ErrorResponseModel | None:
         response = self.send_request(
-            mehod="DELETE",
+            method="DELETE",
             url=self.endpoint.delete_todo(todo_id)
         )
         if allow_not_found and response.status_code == 404:
