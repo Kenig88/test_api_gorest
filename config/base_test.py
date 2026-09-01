@@ -13,7 +13,7 @@ class BaseTest:
     api_todo: ApiTodo
 
     @pytest.fixture(autouse=True)
-    def __init__(self, api_user, api_post, api_comment, api_todo):
+    def setup_apis(self, api_user: ApiUser, api_post: ApiPost, api_comment: ApiComment, api_todo: ApiTodo):
         self.api_user = api_user
         self.api_post = api_post
         self.api_comment = api_comment
