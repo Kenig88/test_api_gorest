@@ -9,6 +9,7 @@ from services.post.post_payload import PostPayloads
 @allure.feature("Post")
 @pytest.mark.smoke
 class TestPostSmoke(BaseTest):
+
     @allure.title("Smoke: CREATE -> GET -> PUT -> GET -> DELETE -> GET 404")
     def test_post_smoke(self, created_user, created_post):
         with allure.step("Create user and post"):

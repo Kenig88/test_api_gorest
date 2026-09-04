@@ -13,7 +13,7 @@ from services.user.user_payloads import UserPayloads
 
 
 class ApiUser(ApiBase):
-    def __init__(self, http_session: requests.Session, endpoints: UserEndpoints, timeout: int = 15):
+    def __init__(self, http_session: requests.Session, endpoints: UserEndpoints, timeout: int = 30):
         super().__init__(http_session=http_session, timeout=timeout)
         self.endpoint = endpoints
 
@@ -25,7 +25,7 @@ class ApiUser(ApiBase):
         response = self.send_request(
             method="POST",
             url=self.endpoint.create_user(),
-            json=payload,
+            json=payload
         )
         body = self._check_status_code(response, ok_statuses=[201])
         return UserResponseModel.model_validate(body)
@@ -53,7 +53,7 @@ class ApiUser(ApiBase):
     ) -> UserResponseModel | ErrorResponseModel:
         response = self.send_request(
             method="GET",
-            url=self.endpoint.get_user_by_id(user_id)
+            url=self.endpoint.get_user_by_id(user_id=user_id)
         )
 
         if expected_status_code == 200:
@@ -69,7 +69,7 @@ class ApiUser(ApiBase):
 
         response = self.send_request(
             method="PUT",
-            url=self.endpoint.update_user(user_id),
+            url=self.endpoint.update_user(user_id=user_id),
             json=payload
         )
         body = self._check_status_code(response, ok_statuses=[200])
@@ -84,7 +84,7 @@ class ApiUser(ApiBase):
     ) -> UserDeleteResponseModel | ErrorResponseModel | None:
         response = self.send_request(
             method="DELETE",
-            url=self.endpoint.delete_user(user_id)
+            url=self.endpoint.delete_user(user_id=user_id)
         )
 
         if allow_not_found and response.status_code == 404:

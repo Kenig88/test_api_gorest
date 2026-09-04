@@ -35,7 +35,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 LOGS_DIR = PROJECT_ROOT / "logs"
 
 # Стандартный timeout для API-запросов
-DEFAULT_TIMEOUT = 15
+DEFAULT_TIMEOUT = 30
 
 # Количество повторных попыток для безопасных HTTP-методов
 SAFE_METHOD_RETRIES = 1

@@ -9,6 +9,7 @@ from services.user.user_payloads import UserPayloads
 @allure.feature("User")
 @pytest.mark.smoke
 class TestUserSmoke(BaseTest):
+
     @allure.title("Smoke: CREATE -> GET -> PUT -> GET -> DELETE -> GET 404")
     def test_user_smoke(self, created_user):
         with allure.step("Create user"):

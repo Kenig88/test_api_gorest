@@ -13,12 +13,7 @@ from services.post.post_payload import PostPayloads
 
 
 class ApiPost(ApiBase):
-    def __init__(
-            self,
-            http_session: requests.Session,
-            endpoints: PostEndpoints,
-            timeout: int = 15
-    ):
+    def __init__(self, http_session: requests.Session, endpoints: PostEndpoints, timeout: int = 30):
         super().__init__(http_session=http_session, timeout=timeout)
         self.endpoint = endpoints
 
@@ -29,7 +24,7 @@ class ApiPost(ApiBase):
 
         response = self.send_request(
             method="POST",
-            url=self.endpoint.create_post(user_id),
+            url=self.endpoint.create_post(user_id=user_id),
             json=payload
         )
         body = self._check_status_code(response, ok_statuses=[201])
@@ -37,11 +32,11 @@ class ApiPost(ApiBase):
         assert post.user_id == int(user_id)
         return post
 
-    @allure.step("GET == /users{user_id}/posts")
+    @allure.step("GET == /users/{user_id}/posts")
     def get_list_posts_by_user_id(self, user_id: int | str, page: int, per_page: int) -> PostListResponseModel:
         response = self.send_request(
             method="GET",
-            url=self.endpoint.get_list_posts_by_user_id(user_id),
+            url=self.endpoint.get_list_posts_by_user_id(user_id=user_id),
             params={"page": page, "per_page": per_page}
         )
         body = self._check_status_code(response, ok_statuses=[200])
@@ -72,7 +67,7 @@ class ApiPost(ApiBase):
     ) -> PostResponseModel | ErrorResponseModel:
         response = self.send_request(
             method="GET",
-            url=self.endpoint.get_post_by_id(post_id)
+            url=self.endpoint.get_post_by_id(post_id=post_id)
         )
         if expected_status_code == 200:
             body = self._check_status_code(response, ok_statuses=[200])
@@ -85,7 +80,7 @@ class ApiPost(ApiBase):
             payload = PostPayloads.update_post_payload()
         response = self.send_request(
             method="PUT",
-            url=self.endpoint.update_post(post_id),
+            url=self.endpoint.update_post(post_id=post_id),
             json=payload
         )
         body = self._check_status_code(response, ok_statuses=[200])
@@ -100,7 +95,7 @@ class ApiPost(ApiBase):
     ) -> PostDeleteResponseModel | ErrorResponseModel | None:
         response = self.send_request(
             method="DELETE",
-            url=self.endpoint.delete_post(post_id)
+            url=self.endpoint.delete_post(post_id=post_id)
         )
         if allow_not_found and response.status_code == 404:
             return None
