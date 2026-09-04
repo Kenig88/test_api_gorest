@@ -13,7 +13,7 @@ from services.error_models import ErrorResponseModel
 
 
 class ApiComment(ApiBase):
-    def __init__(self, http_session: requests.Session, endpoints: CommentEndpoints, timeout: int = 15):
+    def __init__(self, http_session: requests.Session, endpoints: CommentEndpoints, timeout: int = 30):
         super().__init__(http_session=http_session, timeout=timeout)
         self.endpoint = endpoints
 
@@ -23,7 +23,7 @@ class ApiComment(ApiBase):
             payload = CommentPayload.create_comment_payload()
         response = self.send_request(
             method="POST",
-            url=self.endpoint.create_comment(post_id),
+            url=self.endpoint.create_comment(post_id=post_id),
             json=payload
         )
         body = self._check_status_code(response, ok_statuses=[201])
@@ -35,7 +35,7 @@ class ApiComment(ApiBase):
     def get_list_comments_by_post_id(self, post_id: int | str, page: int, per_page: int) -> CommentsListResponseModel:
         response = self.send_request(
             method="GET",
-            url=self.endpoint.get_list_comments_by_post_id(post_id),
+            url=self.endpoint.get_list_comments_by_post_id(post_id=post_id),
             params={"page": page, "per_page": per_page}
         )
         body = self._check_status_code(response, ok_statuses=[200])
@@ -67,12 +67,12 @@ class ApiComment(ApiBase):
             allow_not_found: bool = False) -> CommentDeleteResponseModel | ErrorResponseModel | None:
         response = self.send_request(
             method="DELETE",
-            url=self.endpoint.delete_comment(comment_id)
+            url=self.endpoint.delete_comment(comment_id=comment_id)
         )
         if allow_not_found and response.status_code == 404:
             return None
         if expected_status_code == 204:
             self._check_status_code(response, ok_statuses=[204])
-            assert response.content == b"", "DELETE 204 должен возвращать body"
+            assert response.content == b"", "DELETE 204 должен возвращать пустое body"
             return CommentDeleteResponseModel(id=int(comment_id))
         return self.error_from_response(response, expected_status_code)

@@ -11,6 +11,7 @@ from services.todo.todo_payload import TodoPayloads
 @allure.feature("Todo")
 @pytest.mark.smoke
 class TestTodoSmoke(BaseTest):
+
     @allure.title("Smoke: CREATE -> GET -> PUT -> GET -> DELETE -> GET 404")
     def test_todo_smoke(self, created_user, created_todo):
         with allure.step("Create user and todo"):

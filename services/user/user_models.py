@@ -32,7 +32,7 @@ class UserListResponseModel(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     # Количество данных, минимум 0
-    data: int = Field(strict=True, ge=0)
+    data: list[UserResponseModel]
 
     # Общее количество пользователей, минимум 0
     total: int = Field(strict=True, ge=0)

@@ -8,6 +8,7 @@ from config.base_test import BaseTest
 @allure.feature("Comment")
 @pytest.mark.smoke
 class TestCommentSmoke(BaseTest):
+
     @allure.title("Smoke: CREATE -> LIST by post -> DELETE -> DELETE 404")
     def test_comment_smoke(self, created_user, created_post, created_comment):
         with allure.step("Create user, post and comment"):

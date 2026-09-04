@@ -13,7 +13,7 @@ from services.todo.todo_payload import TodoPayloads
 
 
 class ApiTodo(ApiBase):
-    def __init__(self, http_session: requests.Session, endpoints: TodoEndpoints, timeout: int = 15):
+    def __init__(self, http_session: requests.Session, endpoints: TodoEndpoints, timeout: int = 30):
         super().__init__(http_session=http_session, timeout=timeout)
         self.endpoint = endpoints
 
@@ -23,7 +23,7 @@ class ApiTodo(ApiBase):
             payload = TodoPayloads.create_todo_payload()
         response = self.send_request(
             method="POST",
-            url=self.endpoint.create_todo(user_id),
+            url=self.endpoint.create_todo(user_id=user_id),
             json=payload
         )
         body = self._check_status_code(response, ok_statuses=[201])
@@ -35,7 +35,7 @@ class ApiTodo(ApiBase):
     def get_list_todos_by_user_id(self, user_id: int | str, page: int, per_page: int) -> TodoListResponseModel:
         response = self.send_request(
             method="GET",
-            url=self.endpoint.get_list_todos_by_user_id(user_id),
+            url=self.endpoint.get_list_todos_by_user_id(user_id=user_id),
             params={"page": page, "per_page": per_page}
         )
         body = self._check_status_code(response, ok_statuses=[200])
@@ -66,7 +66,7 @@ class ApiTodo(ApiBase):
             expected_status_code: int = 200) -> TodoResponseModel | ErrorResponseModel:
         response = self.send_request(
             method="GET",
-            url=self.endpoint.get_todo_by_id(todo_id)
+            url=self.endpoint.get_todo_by_id(todo_id=todo_id)
         )
         if expected_status_code == 200:
             body = self._check_status_code(response, ok_statuses=[200])
@@ -79,7 +79,7 @@ class ApiTodo(ApiBase):
             payload = TodoPayloads.update_todo_payload()
         response = self.send_request(
             method="PUT",
-            url=self.endpoint.update_todo(todo_id),
+            url=self.endpoint.update_todo(todo_id=todo_id),
             json=payload
         )
         body = self._check_status_code(response, ok_statuses=[200])
@@ -93,7 +93,7 @@ class ApiTodo(ApiBase):
             allow_not_found: bool = False) -> TodoDeleteResponseModel | ErrorResponseModel | None:
         response = self.send_request(
             method="DELETE",
-            url=self.endpoint.delete_todo(todo_id)
+            url=self.endpoint.delete_todo(todo_id=todo_id)
         )
         if allow_not_found and response.status_code == 404:
             return None
