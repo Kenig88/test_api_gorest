@@ -4,7 +4,7 @@ import allure
 import pytest
 
 from config.base_test import BaseTest
-from services.todo.todo_payload import TodoPayloads
+from services.todo.todo_payloads import TodoPayloads
 
 
 @allure.epic("Administration")

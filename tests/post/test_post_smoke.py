@@ -2,7 +2,7 @@ import allure
 import pytest
 
 from config.base_test import BaseTest
-from services.post.post_payload import PostPayloads
+from services.post.post_payloads import PostPayloads
 
 
 @allure.epic("Administration")

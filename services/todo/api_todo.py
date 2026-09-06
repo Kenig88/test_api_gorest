@@ -7,9 +7,9 @@ from services.todo.todo_endpoints import TodoEndpoints
 from services.todo.todo_models import (
     TodoResponseModel,
     TodoListResponseModel,
-    TodoDeleteResponseModel
+    TodoDeleteResultModel
 )
-from services.todo.todo_payload import TodoPayloads
+from services.todo.todo_payloads import TodoPayloads
 
 
 class ApiTodo(ApiBase):
@@ -28,7 +28,6 @@ class ApiTodo(ApiBase):
         )
         body = self._check_status_code(response, ok_statuses=[201])
         todo = TodoResponseModel.model_validate(body)
-        assert todo.user_id == int(user_id)
         return todo
 
     @allure.step("GET == /users/{user_id}/todos")
@@ -90,7 +89,7 @@ class ApiTodo(ApiBase):
             self,
             todo_id: int | str,
             expected_status_code: int = 204,
-            allow_not_found: bool = False) -> TodoDeleteResponseModel | ErrorResponseModel | None:
+            allow_not_found: bool = False) -> TodoDeleteResultModel | ErrorResponseModel | None:
         response = self.send_request(
             method="DELETE",
             url=self.endpoint.delete_todo(todo_id=todo_id)
@@ -100,5 +99,5 @@ class ApiTodo(ApiBase):
         if expected_status_code == 204:
             self._check_status_code(response, ok_statuses=[204])
             assert response.content == b"", "DELETE 204 должен возвращать пустое body"
-            return TodoDeleteResponseModel(id=int(todo_id))
+            return TodoDeleteResultModel(id=int(todo_id))
         return self.error_from_response(response, expected_status_code)

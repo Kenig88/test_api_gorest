@@ -7,7 +7,7 @@ from services.user.user_endpoints import UserEndpoints
 from services.user.user_models import (
     UserResponseModel,
     UserListResponseModel,
-    UserDeleteResponseModel,
+    UserDeleteResultModel,
 )
 from services.user.user_payloads import UserPayloads
 
@@ -81,7 +81,7 @@ class ApiUser(ApiBase):
             user_id: int | str,
             expected_status_code: int = 204,
             allow_not_found: bool = False
-    ) -> UserDeleteResponseModel | ErrorResponseModel | None:
+    ) -> UserDeleteResultModel | ErrorResponseModel | None:
         response = self.send_request(
             method="DELETE",
             url=self.endpoint.delete_user(user_id=user_id)
@@ -93,6 +93,6 @@ class ApiUser(ApiBase):
         if expected_status_code == 204:
             self._check_status_code(response, ok_statuses=[204])
             assert response.content == b"", "DELETE 204 должен возвращать пустое body"
-            return UserDeleteResponseModel(id=int(user_id))
+            return UserDeleteResultModel(id=int(user_id))
 
         return self.error_from_response(response, expected_status_code)

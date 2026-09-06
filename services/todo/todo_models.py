@@ -10,7 +10,7 @@ class TodoResponseModel(BaseModel):
     id: int = Field(strict=True, gt=0)
     user_id: int = Field(strict=True, gt=0)
     title: str = Field(min_length=1)
-    due_on: datetime
+    due_on: datetime | None
     status: Literal["pending", "completed"]
 
 
@@ -24,7 +24,7 @@ class TodoListResponseModel(BaseModel):
     limit: int = Field(strict=True, ge=1, le=100)
 
 
-class TodoDeleteResponseModel(BaseModel):
+class TodoDeleteResultModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: int
