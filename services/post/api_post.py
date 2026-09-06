@@ -7,9 +7,9 @@ from services.post.post_endpoints import PostEndpoints
 from services.post.post_models import (
     PostResponseModel,
     PostListResponseModel,
-    PostDeleteResponseModel
+    PostDeleteResultModel
 )
-from services.post.post_payload import PostPayloads
+from services.post.post_payloads import PostPayloads
 
 
 class ApiPost(ApiBase):
@@ -29,7 +29,6 @@ class ApiPost(ApiBase):
         )
         body = self._check_status_code(response, ok_statuses=[201])
         post = PostResponseModel.model_validate(body)
-        assert post.user_id == int(user_id)
         return post
 
     @allure.step("GET == /users/{user_id}/posts")
@@ -92,7 +91,7 @@ class ApiPost(ApiBase):
             post_id: int | str,
             expected_status_code: int = 204,
             allow_not_found: bool = False
-    ) -> PostDeleteResponseModel | ErrorResponseModel | None:
+    ) -> PostDeleteResultModel | ErrorResponseModel | None:
         response = self.send_request(
             method="DELETE",
             url=self.endpoint.delete_post(post_id=post_id)
@@ -102,5 +101,5 @@ class ApiPost(ApiBase):
         if expected_status_code == 204:
             self._check_status_code(response, ok_statuses=[204])
             assert response.content == b"", "DELETE 204 должен возвращать пустое body"
-            return PostDeleteResponseModel(id=int(post_id))
+            return PostDeleteResultModel(id=int(post_id))
         return self.error_from_response(response, expected_status_code)

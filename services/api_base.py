@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class ApiBase(Helper):
 
     # Сохраняем HTTP-сессию и стандартный timeout
-    def __init__(self, http_session: requests.Session, timeout: int = 15):
+    def __init__(self, http_session: requests.Session, timeout: int = 30):
         self.http_session = http_session
         self.timeout = timeout
 

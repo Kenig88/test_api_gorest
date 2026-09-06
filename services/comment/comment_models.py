@@ -11,7 +11,7 @@ class CommentResponseModel(BaseModel):
     body: str = Field(min_length=1)
 
 
-class CommentsListResponseModel(BaseModel):
+class CommentListResponseModel(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     data: list[CommentResponseModel]
@@ -21,7 +21,7 @@ class CommentsListResponseModel(BaseModel):
     limit: int = Field(strict=True, ge=1, le=100)
 
 
-class CommentDeleteResponseModel(BaseModel):
+class CommentDeleteResultModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: int

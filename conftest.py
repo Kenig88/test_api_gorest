@@ -14,7 +14,7 @@ from services.user.user_payloads import UserPayloads
 
 from services.post.api_post import ApiPost
 from services.post.post_endpoints import PostEndpoints
-from services.post.post_payload import PostPayloads
+from services.post.post_payloads import PostPayloads
 
 from services.comment.api_comment import ApiComment
 from services.comment.comment_endpoints import CommentEndpoints
@@ -22,7 +22,7 @@ from services.comment.comment_payload import CommentPayload
 
 from services.todo.api_todo import ApiTodo
 from services.todo.todo_endpoints import TodoEndpoints
-from services.todo.todo_payload import TodoPayloads
+from services.todo.todo_payloads import TodoPayloads
 
 # Загружаем переменные из файла .env
 # Например: BASE_URL и API_TOKEN
@@ -249,7 +249,7 @@ def api_user(
 
 
 # Fixture-фабрика для создания тестовых пользователей
-@pytest.fixture(scope="session")
+@pytest.fixture
 def created_user(api_user: ApiUser):
     # Сюда сохраняем ID всех созданных пользователей,
     # чтобы после тестов их удалить
@@ -309,7 +309,7 @@ def api_post(
 
 
 # Fixture-фабрика для создания тестовых постов
-@pytest.fixture(scope="session")
+@pytest.fixture
 def created_post(api_post: ApiPost, created_user):
     # Сохраняем ID созданных постов для последующего удаления
     created_post_ids: list[int] = []
@@ -375,7 +375,7 @@ def api_comment(
 
 
 # Fixture-фабрика для создания тестовых комментариев
-@pytest.fixture(scope="session")
+@pytest.fixture
 def created_comment(api_comment: ApiComment, created_post):
     # Сохраняем ID комментариев для последующего удаления
     created_comment_ids: list[int] = []
@@ -441,7 +441,7 @@ def api_todo(
 
 
 # Fixture-фабрика для создания тестовых Todo
-@pytest.fixture(scope="session")
+@pytest.fixture
 def created_todo(api_todo: ApiTodo, created_user):
     # Сохраняем ID созданных Todo для последующего удаления
     created_todo_ids: list[int] = []

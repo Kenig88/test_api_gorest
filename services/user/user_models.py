@@ -16,7 +16,7 @@ class UserResponseModel(BaseModel):
     # email — строка, похожая на email
     email: str = Field(
         min_length=3,
-        pattern=r"[^@\s]+@[^@\s]+$"
+        pattern=r"^[^@\s]+@[^@\s]+$"
     )
 
     # gender может быть только male или female
@@ -48,7 +48,7 @@ class UserListResponseModel(BaseModel):
 
 
 # Модель для удаления пользователя
-class UserDeleteResponseModel(BaseModel):
+class UserDeleteResultModel(BaseModel):
     # Лишние поля запрещены
     model_config = ConfigDict(extra="forbid")
 
