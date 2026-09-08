@@ -1,0 +1,245 @@
+name: GoRest API Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: Test suite to run
+        required: true
+        default: smoke
+        type: choice
+        options: [all, smoke, regression, negative]
+      workers:
+        description: xdist workers count
+        required: true
+        default: "2"
+        type: choice
+        options: ["1", "2", "3"]
+
+# All suites publish to the same Pages site, so deployments are serialized.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  run-tests:
+    name: Run GoRest API tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      BASE_URL: ${{ secrets.BASE_URL }}
+      API_TOKEN: ${{ secrets.API_TOKEN }}
+      TEST_SUITE: ${{ inputs.suite }}
+      PYTEST_WORKERS: ${{ inputs.workers }}
+      ALLURE_VERSION: "2.45.0"
+      HISTORY_BRANCH: allure-history-${{ inputs.suite }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Validate configuration and prepare output directories
+        id: prepare
+        run: |
+          : "${BASE_URL:?Set the BASE_URL secret}"
+          : "${API_TOKEN:?Set the API_TOKEN secret}"
+          case "$TEST_SUITE" in
+            all|smoke|regression|negative) ;;
+            *) echo "::error::Unknown test suite"; exit 1 ;;
+          esac
+          case "$PYTEST_WORKERS" in
+            1|2|3) ;;
+            *) echo "::error::Unsupported worker count"; exit 1 ;;
+          esac
+          rm -rf allure-results logs
+          mkdir -p allure-results logs
+          docker compose config --quiet
+
+      - name: Build selected Docker service
+        id: build
+        run: docker compose build "$TEST_SUITE"
+
+      - name: Run selected test suite
+        id: tests
+        continue-on-error: true
+        run: docker compose run --rm "$TEST_SUITE"
+
+      - name: Fix artifact permissions
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: sudo chown -R "$(id -u):$(id -g)" allure-results logs
+
+      - name: Check that pytest produced results
+        id: results
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          if compgen -G "allure-results/*-result.json" > /dev/null; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::error::No Allure test results; the existing Pages report will be kept"
+            exit 1
+          fi
+
+      - name: Add Allure metadata
+        id: metadata
+        if: ${{ !cancelled() && steps.results.outputs.available == 'true' }}
+        run: |
+          jq -n \
+            --arg report_name "GoRest API Tests: $TEST_SUITE" \
+            --arg build_name "$GITHUB_WORKFLOW #$GITHUB_RUN_NUMBER (attempt $GITHUB_RUN_ATTEMPT)" \
+            --arg build_url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --argjson build_order "$GITHUB_RUN_NUMBER" \
+            '{name: "GitHub Actions", type: "github", reportName: $report_name,
+              buildOrder: $build_order, buildName: $build_name, buildUrl: $build_url}' \
+            > allure-results/executor.json
+
+          printf '%s\n' \
+            "Test_suite=$TEST_SUITE" \
+            "Workers=$PYTEST_WORKERS" \
+            "Runner_OS=$RUNNER_OS" \
+            "Test_type=API" \
+            "Target=GoRest_v2" \
+            "CI=GitHub Actions" \
+            "Docker=true" \
+            > allure-results/environment.properties
+
+      - name: Upload test logs and raw Allure results
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: gorest-results-${{ inputs.suite }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            logs/
+            allure-results/
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Install Java
+        if: ${{ !cancelled() && steps.results.outputs.available == 'true' }}
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Cache Allure CLI
+        if: ${{ !cancelled() && steps.results.outputs.available == 'true' }}
+        uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/allure-${{ env.ALLURE_VERSION }}
+          key: allure-${{ runner.os }}-${{ env.ALLURE_VERSION }}
+
+      - name: Install Allure CLI
+        id: allure
+        if: ${{ !cancelled() && steps.results.outputs.available == 'true' }}
+        run: |
+          allure_dir="$RUNNER_TEMP/allure-$ALLURE_VERSION"
+          if [ ! -x "$allure_dir/bin/allure" ]; then
+            curl --fail --silent --show-error --location --retry 3 \
+              --connect-timeout 10 --max-time 120 \
+              --output "$RUNNER_TEMP/allure.tgz" \
+              "https://github.com/allure-framework/allure2/releases/download/$ALLURE_VERSION/allure-$ALLURE_VERSION.tgz"
+            tar -xzf "$RUNNER_TEMP/allure.tgz" -C "$RUNNER_TEMP"
+          fi
+          echo "$allure_dir/bin" >> "$GITHUB_PATH"
+          "$allure_dir/bin/allure" --version
+
+      - name: Restore history for the selected suite
+        id: history
+        if: ${{ !cancelled() && steps.results.outputs.available == 'true' }}
+        run: |
+          if git ls-remote --exit-code --heads origin "refs/heads/$HISTORY_BRANCH" \
+              > "$RUNNER_TEMP/history-ref.txt"; then
+            git fetch --no-tags --depth=1 origin \
+              "refs/heads/$HISTORY_BRANCH:refs/remotes/origin/$HISTORY_BRANCH"
+            git archive --format=tar --output="$RUNNER_TEMP/allure-history.tar" \
+              "refs/remotes/origin/$HISTORY_BRANCH" history
+            tar -xf "$RUNNER_TEMP/allure-history.tar" -C allure-results
+          else
+            status=$?
+            if [ "$status" -ne 2 ]; then
+              echo "::error::Could not read the history branch"
+              exit "$status"
+            fi
+            echo "No history for $TEST_SUITE yet; starting the first report."
+          fi
+
+      - name: Generate Allure reports
+        id: report
+        if: >-
+          ${{ !cancelled() && steps.metadata.outcome == 'success'
+              && steps.allure.outcome == 'success' && steps.history.outcome == 'success' }}
+        run: |
+          allure generate allure-results -o allure-report-history --clean
+          allure generate allure-results -o allure-report --clean --single-file
+          test -f allure-report/index.html
+          test -d allure-report-history/history
+          touch allure-report/.nojekyll
+
+      - name: Upload downloadable HTML report
+        if: ${{ !cancelled() && steps.report.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: gorest-report-${{ inputs.suite }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: allure-report/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Configure GitHub Pages
+        id: pages_config
+        if: ${{ !cancelled() && steps.report.outcome == 'success' }}
+        uses: actions/configure-pages@v6
+
+      - name: Upload GitHub Pages artifact
+        id: pages_artifact
+        if: ${{ !cancelled() && steps.pages_config.outcome == 'success' }}
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: allure-report
+
+      - name: Deploy Allure report to GitHub Pages
+        id: deployment
+        if: ${{ !cancelled() && steps.pages_artifact.outcome == 'success' }}
+        uses: actions/deploy-pages@v5
+
+      - name: Persist Allure history
+        if: ${{ !cancelled() && steps.report.outcome == 'success' }}
+        run: |
+          history_dir="$RUNNER_TEMP/allure-history-worktree"
+          history_ref="refs/remotes/origin/$HISTORY_BRANCH"
+          if git show-ref --verify --quiet "$history_ref"; then
+            git worktree add --detach "$history_dir" "$history_ref"
+          else
+            git worktree add --detach "$history_dir" HEAD
+            git -C "$history_dir" checkout --orphan history-update
+            git -C "$history_dir" rm -rf .
+          fi
+
+          rm -rf "$history_dir/history"
+          cp -R allure-report-history/history "$history_dir/history"
+          git -C "$history_dir" add -f history
+          if ! git -C "$history_dir" diff --cached --quiet; then
+            git -C "$history_dir" \
+              -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "Update $TEST_SUITE Allure history: run $GITHUB_RUN_NUMBER"
+            git -C "$history_dir" push origin "HEAD:refs/heads/$HISTORY_BRANCH"
+          fi
+          git worktree remove "$history_dir"
+
+      - name: Fail workflow if tests failed
+        if: ${{ always() && steps.tests.outcome == 'failure' }}
+        run: exit 1

@@ -37,8 +37,8 @@ class UserListResponseModel(BaseModel):
     # Общее количество пользователей, минимум 0
     total: int = Field(strict=True, ge=0)
 
-    # Количество страниц, минимум 1
-    pages: int = Field(strict=True, ge=1)
+    # Количество страниц, минимум 0
+    pages: int = Field(strict=True, ge=0)
 
     # Текущая страница, минимум 1
     page: int = Field(strict=True, ge=1)
