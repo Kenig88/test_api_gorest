@@ -1,25 +1,38 @@
 name: GoRest API Tests
 
+run-name: "${{ inputs.suite }} tests | workers=${{ inputs.workers }} | run #${{ github.run_number }}"
+
 on:
   workflow_dispatch:
     inputs:
       suite:
-        description: Test suite to run
+        description: "Test suite to run"
         required: true
-        default: smoke
+        default: "all"
         type: choice
-        options: [all, smoke, regression, negative]
+        options:
+          - all
+          - smoke
+          - regression
+          - negative
+
       workers:
-        description: xdist workers count
+        description: "xdist workers count"
         required: true
         default: "2"
         type: choice
-        options: ["1", "2", "3"]
+        options:
+          - "1"
+          - "2"
+          - "3"
+          - "4"
 
-# All suites publish to the same Pages site, so deployments are serialized.
+
+# GitHub Pages один, поэтому одновременно публикуем только один отчёт.
 concurrency:
   group: pages
   cancel-in-progress: false
+
 
 jobs:
   run-tests:
@@ -36,76 +49,134 @@ jobs:
       pages: write
       id-token: write
 
-    defaults:
-      run:
-        shell: bash
-
     env:
       BASE_URL: ${{ secrets.BASE_URL }}
       API_TOKEN: ${{ secrets.API_TOKEN }}
+
       TEST_SUITE: ${{ inputs.suite }}
       PYTEST_WORKERS: ${{ inputs.workers }}
+
       ALLURE_VERSION: "2.45.0"
-      HISTORY_BRANCH: allure-history-${{ inputs.suite }}
+
+      # Одна общая ветка истории для:
+      # all / smoke / regression / negative
+      HISTORY_BRANCH: allure-history
+
 
     steps:
+
+      # ---------------------------------------------------------
+      # 1. Получаем код проекта
+      # ---------------------------------------------------------
+
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Validate configuration and prepare output directories
-        id: prepare
+
+      # ---------------------------------------------------------
+      # 2. Проверяем настройки
+      # ---------------------------------------------------------
+
+      - name: Validate configuration
         run: |
           : "${BASE_URL:?Set the BASE_URL secret}"
           : "${API_TOKEN:?Set the API_TOKEN secret}"
+
           case "$TEST_SUITE" in
-            all|smoke|regression|negative) ;;
-            *) echo "::error::Unknown test suite"; exit 1 ;;
+            all|smoke|regression|negative)
+              ;;
+            *)
+              echo "::error::Unknown test suite: $TEST_SUITE"
+              exit 1
+              ;;
           esac
+
           case "$PYTEST_WORKERS" in
-            1|2|3) ;;
-            *) echo "::error::Unsupported worker count"; exit 1 ;;
+            1|2|3|4)
+              ;;
+            *)
+              echo "::error::Unsupported worker count: $PYTEST_WORKERS"
+              exit 1
+              ;;
           esac
+
           rm -rf allure-results logs
           mkdir -p allure-results logs
+
           docker compose config --quiet
 
-      - name: Build selected Docker service
-        id: build
+
+      # ---------------------------------------------------------
+      # 3. Собираем Docker-образ
+      # ---------------------------------------------------------
+
+      - name: Build Docker image
         run: docker compose build "$TEST_SUITE"
+
+
+      # ---------------------------------------------------------
+      # 4. Запускаем выбранные тесты
+      #
+      # continue-on-error нужен специально:
+      # если pytest упадёт, мы всё равно хотим получить
+      # логи и Allure-отчёт.
+      # ---------------------------------------------------------
 
       - name: Run selected test suite
         id: tests
         continue-on-error: true
         run: docker compose run --rm "$TEST_SUITE"
 
-      - name: Fix artifact permissions
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
-        run: sudo chown -R "$(id -u):$(id -g)" allure-results logs
 
-      - name: Check that pytest produced results
+      # ---------------------------------------------------------
+      # 5. Исправляем права на файлы после Docker
+      # ---------------------------------------------------------
+
+      - name: Fix artifact permissions
+        if: always()
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" allure-results logs || true
+
+
+      # ---------------------------------------------------------
+      # 6. Проверяем, что pytest действительно создал
+      #    Allure results
+      # ---------------------------------------------------------
+
+      - name: Check Allure results
         id: results
-        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        if: always()
         run: |
           if compgen -G "allure-results/*-result.json" > /dev/null; then
             echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "Allure results found."
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::error::No Allure test results; the existing Pages report will be kept"
+            echo "::error::No Allure test results were produced."
             exit 1
           fi
 
+
+      # ---------------------------------------------------------
+      # 7. Добавляем информацию о запуске в Allure
+      # ---------------------------------------------------------
+
       - name: Add Allure metadata
-        id: metadata
-        if: ${{ !cancelled() && steps.results.outputs.available == 'true' }}
+        if: steps.results.outputs.available == 'true'
         run: |
           jq -n \
             --arg report_name "GoRest API Tests: $TEST_SUITE" \
-            --arg build_name "$GITHUB_WORKFLOW #$GITHUB_RUN_NUMBER (attempt $GITHUB_RUN_ATTEMPT)" \
+            --arg build_name "$GITHUB_WORKFLOW #$GITHUB_RUN_NUMBER" \
             --arg build_url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
             --argjson build_order "$GITHUB_RUN_NUMBER" \
-            '{name: "GitHub Actions", type: "github", reportName: $report_name,
-              buildOrder: $build_order, buildName: $build_name, buildUrl: $build_url}' \
-            > allure-results/executor.json
+            '{
+              name: "GitHub Actions",
+              type: "github",
+              reportName: $report_name,
+              buildOrder: $build_order,
+              buildName: $build_name,
+              buildUrl: $build_url
+            }' > allure-results/executor.json
 
           printf '%s\n' \
             "Test_suite=$TEST_SUITE" \
@@ -117,129 +188,236 @@ jobs:
             "Docker=true" \
             > allure-results/environment.properties
 
-      - name: Upload test logs and raw Allure results
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+
+      # ---------------------------------------------------------
+      # 8. Сохраняем raw results и pytest logs
+      # ---------------------------------------------------------
+
+      - name: Upload test logs and Allure results
+        if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: gorest-results-${{ inputs.suite }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: gorest-results-${{ inputs.suite }}-${{ github.run_id }}
           path: |
             logs/
             allure-results/
           if-no-files-found: warn
           retention-days: 14
 
+
+      # ---------------------------------------------------------
+      # 9. Устанавливаем Java для Allure CLI
+      # ---------------------------------------------------------
+
       - name: Install Java
-        if: ${{ !cancelled() && steps.results.outputs.available == 'true' }}
+        if: steps.results.outputs.available == 'true'
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Cache Allure CLI
-        if: ${{ !cancelled() && steps.results.outputs.available == 'true' }}
-        uses: actions/cache@v6
-        with:
-          path: ${{ runner.temp }}/allure-${{ env.ALLURE_VERSION }}
-          key: allure-${{ runner.os }}-${{ env.ALLURE_VERSION }}
+
+      # ---------------------------------------------------------
+      # 10. Устанавливаем Allure CLI
+      #
+      # Cache специально не используем:
+      # workflow получается проще и понятнее.
+      # ---------------------------------------------------------
 
       - name: Install Allure CLI
-        id: allure
-        if: ${{ !cancelled() && steps.results.outputs.available == 'true' }}
+        if: steps.results.outputs.available == 'true'
         run: |
-          allure_dir="$RUNNER_TEMP/allure-$ALLURE_VERSION"
-          if [ ! -x "$allure_dir/bin/allure" ]; then
-            curl --fail --silent --show-error --location --retry 3 \
-              --connect-timeout 10 --max-time 120 \
-              --output "$RUNNER_TEMP/allure.tgz" \
-              "https://github.com/allure-framework/allure2/releases/download/$ALLURE_VERSION/allure-$ALLURE_VERSION.tgz"
-            tar -xzf "$RUNNER_TEMP/allure.tgz" -C "$RUNNER_TEMP"
-          fi
-          echo "$allure_dir/bin" >> "$GITHUB_PATH"
-          "$allure_dir/bin/allure" --version
+          curl \
+            --fail \
+            --location \
+            --retry 3 \
+            --output "$RUNNER_TEMP/allure.tgz" \
+            "https://github.com/allure-framework/allure2/releases/download/$ALLURE_VERSION/allure-$ALLURE_VERSION.tgz"
 
-      - name: Restore history for the selected suite
-        id: history
-        if: ${{ !cancelled() && steps.results.outputs.available == 'true' }}
+          tar \
+            -xzf "$RUNNER_TEMP/allure.tgz" \
+            -C "$RUNNER_TEMP"
+
+          echo "$RUNNER_TEMP/allure-$ALLURE_VERSION/bin" >> "$GITHUB_PATH"
+
+          "$RUNNER_TEMP/allure-$ALLURE_VERSION/bin/allure" --version
+
+
+      # ---------------------------------------------------------
+      # 11. Восстанавливаем историю предыдущего отчёта
+      #
+      # Используется ОДНА ветка:
+      #
+      # allure-history
+      #
+      # независимо от того, запускали мы:
+      # all / smoke / regression / negative.
+      # ---------------------------------------------------------
+
+      - name: Restore Allure history
+        if: steps.results.outputs.available == 'true'
         run: |
-          if git ls-remote --exit-code --heads origin "refs/heads/$HISTORY_BRANCH" \
-              > "$RUNNER_TEMP/history-ref.txt"; then
-            git fetch --no-tags --depth=1 origin \
-              "refs/heads/$HISTORY_BRANCH:refs/remotes/origin/$HISTORY_BRANCH"
-            git archive --format=tar --output="$RUNNER_TEMP/allure-history.tar" \
-              "refs/remotes/origin/$HISTORY_BRANCH" history
-            tar -xf "$RUNNER_TEMP/allure-history.tar" -C allure-results
+          echo "History branch: $HISTORY_BRANCH"
+
+          if git ls-remote \
+            --exit-code \
+            --heads \
+            origin \
+            "$HISTORY_BRANCH" > /dev/null 2>&1
+          then
+            echo "Previous Allure history found."
+
+            git fetch \
+              --depth=1 \
+              origin \
+              "$HISTORY_BRANCH:$HISTORY_BRANCH"
+
+            rm -rf "$RUNNER_TEMP/old-allure-history"
+            mkdir -p "$RUNNER_TEMP/old-allure-history"
+
+            git archive \
+              --format=tar \
+              "$HISTORY_BRANCH" \
+              history \
+              | tar -x -C "$RUNNER_TEMP/old-allure-history"
+
+            mkdir -p allure-results/history
+
+            cp -R \
+              "$RUNNER_TEMP/old-allure-history/history/." \
+              allure-results/history/
+
+            echo "Previous history restored."
           else
-            status=$?
-            if [ "$status" -ne 2 ]; then
-              echo "::error::Could not read the history branch"
-              exit "$status"
-            fi
-            echo "No history for $TEST_SUITE yet; starting the first report."
+            echo "No previous Allure history."
+            echo "This is normal for the first run."
           fi
+
+
+      # ---------------------------------------------------------
+      # 12. Генерируем Allure
+      #
+      # Первый отчёт нужен для history.
+      #
+      # Второй --single-file нужен для GitHub Pages.
+      # ---------------------------------------------------------
 
       - name: Generate Allure reports
         id: report
-        if: >-
-          ${{ !cancelled() && steps.metadata.outcome == 'success'
-              && steps.allure.outcome == 'success' && steps.history.outcome == 'success' }}
+        if: steps.results.outputs.available == 'true'
         run: |
-          allure generate allure-results -o allure-report-history --clean
-          allure generate allure-results -o allure-report --clean --single-file
+          allure generate \
+            allure-results \
+            -o allure-report-history \
+            --clean
+
+          allure generate \
+            allure-results \
+            -o allure-report \
+            --clean \
+            --single-file
+
           test -f allure-report/index.html
           test -d allure-report-history/history
+
           touch allure-report/.nojekyll
 
-      - name: Upload downloadable HTML report
-        if: ${{ !cancelled() && steps.report.outcome == 'success' }}
+          echo "Allure report generated."
+
+
+      # ---------------------------------------------------------
+      # 13. Сохраняем HTML-отчёт как обычный GitHub Artifact
+      # ---------------------------------------------------------
+
+      - name: Upload downloadable Allure report
+        if: steps.report.outcome == 'success'
         uses: actions/upload-artifact@v7
         with:
-          name: gorest-report-${{ inputs.suite }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: gorest-report-${{ inputs.suite }}-${{ github.run_id }}
           path: allure-report/
           if-no-files-found: error
           retention-days: 14
 
+
+      # ---------------------------------------------------------
+      # 14. Настраиваем GitHub Pages
+      # ---------------------------------------------------------
+
       - name: Configure GitHub Pages
-        id: pages_config
-        if: ${{ !cancelled() && steps.report.outcome == 'success' }}
+        if: steps.report.outcome == 'success'
         uses: actions/configure-pages@v6
 
+
+      # ---------------------------------------------------------
+      # 15. Загружаем отчёт для GitHub Pages
+      # ---------------------------------------------------------
+
       - name: Upload GitHub Pages artifact
-        id: pages_artifact
-        if: ${{ !cancelled() && steps.pages_config.outcome == 'success' }}
+        if: steps.report.outcome == 'success'
         uses: actions/upload-pages-artifact@v5
         with:
           path: allure-report
 
+
+      # ---------------------------------------------------------
+      # 16. Публикуем Allure на GitHub Pages
+      # ---------------------------------------------------------
+
       - name: Deploy Allure report to GitHub Pages
         id: deployment
-        if: ${{ !cancelled() && steps.pages_artifact.outcome == 'success' }}
+        if: steps.report.outcome == 'success'
         uses: actions/deploy-pages@v5
 
-      - name: Persist Allure history
-        if: ${{ !cancelled() && steps.report.outcome == 'success' }}
-        run: |
-          history_dir="$RUNNER_TEMP/allure-history-worktree"
-          history_ref="refs/remotes/origin/$HISTORY_BRANCH"
-          if git show-ref --verify --quiet "$history_ref"; then
-            git worktree add --detach "$history_dir" "$history_ref"
-          else
-            git worktree add --detach "$history_dir" HEAD
-            git -C "$history_dir" checkout --orphan history-update
-            git -C "$history_dir" rm -rf .
-          fi
 
-          rm -rf "$history_dir/history"
-          cp -R allure-report-history/history "$history_dir/history"
-          git -C "$history_dir" add -f history
-          if ! git -C "$history_dir" diff --cached --quiet; then
-            git -C "$history_dir" \
-              -c user.name="github-actions[bot]" \
-              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-              commit -m "Update $TEST_SUITE Allure history: run $GITHUB_RUN_NUMBER"
-            git -C "$history_dir" push origin "HEAD:refs/heads/$HISTORY_BRANCH"
-          fi
-          git worktree remove "$history_dir"
+      # ---------------------------------------------------------
+      # 17. Сохраняем новую общую Allure history
+      #
+      # Здесь специально используется отдельная служебная
+      # ветка allure-history.
+      #
+      # Force push безопасен в данном случае, потому что эта
+      # ветка предназначена ТОЛЬКО для файлов Allure history.
+      # ---------------------------------------------------------
+
+      - name: Persist Allure history
+        if: steps.report.outcome == 'success'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git checkout --orphan temp-allure-history
+
+          git rm -rf . > /dev/null 2>&1 || true
+
+          mkdir -p history
+
+          cp -R \
+            allure-report-history/history/. \
+            history/
+
+          git add -f history
+
+          git commit \
+            -m "Update Allure history: $TEST_SUITE run $GITHUB_RUN_NUMBER"
+
+          git branch -M "$HISTORY_BRANCH"
+
+          git push \
+            --force \
+            origin \
+            "$HISTORY_BRANCH"
+
+          echo "Allure history saved to branch: $HISTORY_BRANCH"
+
+
+      # ---------------------------------------------------------
+      # 18. Возвращаем workflow статус FAILED,
+      #     если pytest действительно упал.
+      #
+      # До этого момента continue-on-error позволял нам
+      # всё равно создать Allure report.
+      # ---------------------------------------------------------
 
       - name: Fail workflow if tests failed
-        if: ${{ always() && steps.tests.outcome == 'failure' }}
+        if: always() && steps.tests.outcome == 'failure'
         run: exit 1
