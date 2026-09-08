@@ -1,2 +1,39 @@
+x-base: &base
+  build: .
+  working_dir: /usr/workspace
+  volumes:
+    - .:/usr/workspace
+  environment:
+    BASE_URL: ${BASE_URL:?BASE_URL is required}
+    API_TOKEN: ${API_TOKEN:?API_TOKEN is required}
+    PYTEST_WORKERS: ${PYTEST_WORKERS:-2}
+    TZ: Europe/Moscow
+
 services:
-  
+  all:
+    <<: *base
+    command: >
+      sh -c "mkdir -p logs allure-results &&
+      pytest -n $$PYTEST_WORKERS
+      --alluredir=allure-results --clean-alluredir"
+
+  smoke:
+    <<: *base
+    command: >
+      sh -c "mkdir -p logs allure-results &&
+      pytest -m smoke -n $$PYTEST_WORKERS
+      --alluredir=allure-results --clean-alluredir"
+
+  regression:
+    <<: *base
+    command: >
+      sh -c "mkdir -p logs allure-results &&
+      pytest -m regression -n $$PYTEST_WORKERS
+      --alluredir=allure-results --clean-alluredir"
+
+  negative:
+    <<: *base
+    command: >
+      sh -c "mkdir -p logs allure-results &&
+      pytest -m negative -n $$PYTEST_WORKERS
+      --alluredir=allure-results --clean-alluredir"
