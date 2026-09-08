@@ -1,38 +1,100 @@
+# Общие настройки для всех сервисов.
+#
+# x-base — это вспомогательный блок.
+# Docker Compose не запускает его как отдельный сервис.
+#
+# &base создаёт YAML-якорь с именем "base".
+# Позже эти настройки можно переиспользовать через <<: *base.
 x-base: &base
+
+  # Собираем Docker-образ из Dockerfile,
+  # который находится в текущей директории (.).
   build: .
+
+  # Рабочая директория внутри контейнера.
+  # Команды pytest будут выполняться из /usr/workspace.
   working_dir: /usr/workspace
+
+  # Подключаем текущую папку проекта с компьютера
+  # к папке /usr/workspace внутри контейнера.
   volumes:
     - .:/usr/workspace
+
+  # Переменные окружения, которые будут доступны внутри контейнера.
   environment:
+
+    # Базовый URL API.
+    #
+    # Значение берётся из переменной BASE_URL,
+    # например из файла .env.
+    #
+    # :? означает, что переменная обязательна.
+    # Если BASE_URL не задана, Docker Compose выдаст ошибку:
+    # "BASE_URL is required".
     BASE_URL: ${BASE_URL:?BASE_URL is required}
+
+    # Токен авторизации для API.
+    #
+    # Эта переменная тоже обязательна.
+    # Если API_TOKEN не задан, контейнер не будет запущен.
     API_TOKEN: ${API_TOKEN:?API_TOKEN is required}
+
+    # Количество параллельных pytest workers.
+    #
+    # Значение берётся из PYTEST_WORKERS.
+    # Если переменная не задана, используется 2.
     PYTEST_WORKERS: ${PYTEST_WORKERS:-2}
+
+    # Часовой пояс внутри контейнера.
     TZ: Europe/Moscow
 
+
+# Сервисы, которые можно запускать отдельно.
 services:
+
+  # Запускает ВСЕ тесты проекта.
   all:
+
+    # Подставляем сюда все настройки из x-base.
     <<: *base
+
+    # Команда, которая выполняется при запуске сервиса.
     command: >
       sh -c "mkdir -p logs allure-results &&
       pytest -n $$PYTEST_WORKERS
       --alluredir=allure-results --clean-alluredir"
 
+
+  # Запускает только smoke-тесты.
   smoke:
+
+    # Используем общие настройки из x-base.
     <<: *base
+
     command: >
       sh -c "mkdir -p logs allure-results &&
       pytest -m smoke -n $$PYTEST_WORKERS
       --alluredir=allure-results --clean-alluredir"
 
+
+  # Запускает только regression-тесты.
   regression:
+
+    # Используем общие настройки из x-base.
     <<: *base
+
     command: >
       sh -c "mkdir -p logs allure-results &&
       pytest -m regression -n $$PYTEST_WORKERS
       --alluredir=allure-results --clean-alluredir"
 
+
+  # Запускает только negative-тесты.
   negative:
+
+    # Используем общие настройки из x-base.
     <<: *base
+
     command: >
       sh -c "mkdir -p logs allure-results &&
       pytest -m negative -n $$PYTEST_WORKERS
