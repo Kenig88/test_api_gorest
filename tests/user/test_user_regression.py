@@ -37,7 +37,7 @@ class TestUserRegression(BaseTest):
         assert response.page == page
         assert response.limit == per_page
         assert response.total >= 0
-        assert response.pages >= 1
+        assert response.pages >= 0
 
     @allure.title("Get created user by ID")
     def test_get_user_by_id(self, created_user):

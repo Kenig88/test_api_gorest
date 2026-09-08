@@ -23,7 +23,6 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apk add --no-cache \
     tzdata \
     ca-certificates \
-    bash \
 && update-ca-certificates
 
 # tzdata
@@ -82,8 +81,8 @@ CMD ["sh", "-c", "pytest -n ${PYTEST_WORKERS:-2} --alluredir=allure-results --cl
 
 # -n ${PYTEST_WORKERS:-2}
 # Запускает тесты параллельно.
-# Количество потоков берётся из переменной PYTEST_WORKERS.
-# Если переменная не задана, используется 2 потока.
+# Количество процессов берётся из переменной PYTEST_WORKERS.
+# Если переменная не задана, используется 2 процесса.
 #
 # Например:
 # PYTEST_WORKERS=4 -> pytest запустится с -n 4

@@ -68,7 +68,7 @@ def pytest_configure(config):
 
 # Получаем результат выполнения каждого теста
 @pytest.hookimpl(hookwrapper=True)
-def pytest_runtest_makereport(item, call):
+def pytest_runtest_makereport(item):
     # Передаём управление Pytest и ждём результат
     outcome = yield
 
@@ -280,10 +280,23 @@ def created_user(api_user: ApiUser):
 
     # После завершения тестов удаляем
     # всех пользователей, созданных через эту fixture
+    cleanup_errors = []
+
     for user_id in reversed(created_user_ids):
-        api_user.delete_user(
-            user_id,
-            allow_not_found=True
+        try:
+            api_user.delete_user(
+                user_id,
+                allow_not_found=True
+            )
+        except Exception as error:
+            # Сохраняем ошибку и продолжаем удалять остальные объекты
+            cleanup_errors.append(error)
+
+    # После всех попыток сообщаем pytest об ошибках очистки
+    if cleanup_errors:
+        raise ExceptionGroup(
+            "Ошибки при удалении тестовых пользователей",
+            cleanup_errors,
         )
 
 
@@ -346,10 +359,23 @@ def created_post(api_post: ApiPost, created_user):
     yield create_post
 
     # После завершения тестов удаляем созданные посты
+    cleanup_errors = []
+
     for post_id in reversed(created_post_ids):
-        api_post.delete_post(
-            post_id,
-            allow_not_found=True
+        try:
+            api_post.delete_post(
+                post_id,
+                allow_not_found=True
+            )
+        except Exception as error:
+            # Сохраняем ошибку и продолжаем удалять остальные объекты
+            cleanup_errors.append(error)
+
+    # После всех попыток сообщаем pytest об ошибках очистки
+    if cleanup_errors:
+        raise ExceptionGroup(
+            "Ошибки при удалении тестовых постов",
+            cleanup_errors,
         )
 
 
@@ -412,10 +438,23 @@ def created_comment(api_comment: ApiComment, created_post):
     yield create_comment
 
     # После завершения тестов удаляем созданные комментарии
+    cleanup_errors = []
+
     for comment_id in reversed(created_comment_ids):
-        api_comment.delete_comment(
-            comment_id,
-            allow_not_found=True
+        try:
+            api_comment.delete_comment(
+                comment_id,
+                allow_not_found=True
+            )
+        except Exception as error:
+            # Сохраняем ошибку и продолжаем удалять остальные объекты
+            cleanup_errors.append(error)
+
+    # После всех попыток сообщаем pytest об ошибках очистки
+    if cleanup_errors:
+        raise ExceptionGroup(
+            "Ошибки при удалении тестовых комментариев",
+            cleanup_errors,
         )
 
 
@@ -478,8 +517,21 @@ def created_todo(api_todo: ApiTodo, created_user):
     yield create_todo
 
     # После завершения тестов удаляем созданные Todo
+    cleanup_errors = []
+
     for todo_id in reversed(created_todo_ids):
-        api_todo.delete_todo(
-            todo_id,
-            allow_not_found=True
+        try:
+            api_todo.delete_todo(
+                todo_id,
+                allow_not_found=True
+            )
+        except Exception as error:
+            # Сохраняем ошибку и продолжаем удалять остальные объекты
+            cleanup_errors.append(error)
+
+    # После всех попыток сообщаем pytest об ошибках очистки
+    if cleanup_errors:
+        raise ExceptionGroup(
+            "Ошибки при удалении тестовых Todo",
+            cleanup_errors,
         )
